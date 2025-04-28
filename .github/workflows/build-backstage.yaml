@@ -1,6 +1,9 @@
 name: Build and Deploy Backstage App
 
-on: [push]
+on:
+  push:
+    tags:
+      - 'v*' # Trigger the workflow on push events to tags like v1.0.2
 
 jobs:
   build-and-deploy:
