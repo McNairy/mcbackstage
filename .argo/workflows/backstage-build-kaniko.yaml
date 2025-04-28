@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: build-and-push-image-using-kaniko
+spec:
+  entrypoint: main
+  volumeClaimTemplates:
+  - metadata:
+      name: workspace
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 100Mi
+  volumes:
+    - name: docker-config
+      secret:
+        secretName: docker-registry-creds
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: clone-repo
+            template: git-clone
+            parameters:
+              - name: repoUrl
+                value: "https://github.com/McNairy/mcbackstage.git"
+              - name: revision
+                value: "main"
+          - name: build-image
+            template: build-image
+            parameters:
+              - name: dockerfilePath
+                value: "backstage/Dockerfile"
+              - name: registry
+                value: "mmcnairy/mcbackstage"
+              - name: tag
+                value: "latest"
+          - name: push-image
+            template: push-image
+            dependencies: [ build-image ]
+            parameters:
+              - name: imageName
+                value: "{{tasks.build-image.outputs.image}}"
+
+    - name: git-clone
+      container:
+        image: "git:latest"
+        command: [ "sh", "-c" ]
+        args: [ "git clone -b ${{inputs.parameters.revision}} ${{inputs.parameters.repoUrl}} ./source && cd ./source" ]
+
+    - name: build-image
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        args:
+          - --dockerfile
+          - "{{inputs.parameters.dockerfilePath}}"
+          - --destination
+          - "{{inputs.parameters.registry}}:{{inputs.parameters.tag}}"
+          - --context
+          - "./source" # Assuming source code is cloned to ./source
+
+    - name: push-image
+      container:
+        image: "docker:latest"
+        command: ["sh", "-c"]
+        args: ["docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY_URL} && docker push ${inputs.parameters.imageName}"]

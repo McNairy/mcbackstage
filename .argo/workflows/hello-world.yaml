@@ -1,0 +1,10 @@
+# This workflow builds a Backstage docker image using Argo Workflows.
+name: backstage-build
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
